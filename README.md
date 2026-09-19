@@ -194,6 +194,7 @@ data-center-digital-twin/
 │   └── Project documentation
 │
 └── README.md
+
 Project Goals
 
 This project was built to gain practical experience with:
@@ -208,19 +209,4 @@ Systems programming
 Python programming
 Numerical computing
 Data-center infrastructure
-Status
 
-Completed core digital twin functionality, with additional scientific simulation features developed as extensions.
-
-Future Improvements
-
-Potential extensions include:
-
-More detailed thermal modeling
-Improved cooling models
-Predictive maintenance
-Energy optimization
-More advanced anomaly detection
-Cloud deployment
-Containerization
-Larger-scale simulations
