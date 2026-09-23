@@ -32,6 +32,8 @@ class Server:
         self.status = "Online"
         self.failed = False
 
+        self.power = 0
+
     def fail(self):
         """Simulate a server failure."""
 
@@ -175,6 +177,23 @@ class Rack:
             for server in self.servers
         )
 
+    def get_telemetry(self):
+
+        return {
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "rack_id": self.rack_id,
+            "temperature_c": round(
+                self.get_rack_temperature(),
+                2
+            ),
+            "power_watts": round(
+                self.get_total_power(),
+                2
+            ),
+            "active_servers": self.get_active_servers(),
+            "failed_servers": self.get_failed_servers()
+        }
+
 
 # -----------------------------
 # Data Center
@@ -215,33 +234,152 @@ class DataCenter:
             for rack in self.racks
         )
 
-    def print_summary(self):
+    def get_total_power(self):
 
-        total_power = 0
-
-        print("\n" + "=" * 70)
-        print(
-            f"DATA CENTER TELEMETRY | "
-            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        return sum(
+            rack.get_total_power()
+            for rack in self.racks
         )
-        print("=" * 70)
+
+    def get_average_temperature(self):
+
+        active_servers = []
 
         for rack in self.racks:
 
-            rack_temperature = rack.get_rack_temperature()
-            rack_power = rack.get_total_power()
+            for server in rack.servers:
 
-            active_servers = rack.get_active_servers()
-            failed_servers = rack.get_failed_servers()
+                if not server.failed:
+                    active_servers.append(server)
 
-            total_power += rack_power
+        if not active_servers:
+            return 0
+
+        total_temperature = sum(
+            server.temperature
+            for server in active_servers
+        )
+
+        return total_temperature / len(active_servers)
+
+    def get_alerts(self):
+
+        alerts = []
+
+        for rack in self.racks:
+
+            for server in rack.servers:
+
+                if server.status == "Offline":
+
+                    alerts.append({
+                        "type": "SERVER_OFFLINE",
+                        "severity": "Critical",
+                        "server_id": server.server_id,
+                        "rack_id": server.rack_id,
+                        "message": (
+                            f"{server.server_id} is offline"
+                        )
+                    })
+
+                elif server.status == "High Load":
+
+                    alerts.append({
+                        "type": "HIGH_CPU",
+                        "severity": "Warning",
+                        "server_id": server.server_id,
+                        "rack_id": server.rack_id,
+                        "message": (
+                            f"{server.server_id} is under high load"
+                        )
+                    })
+
+                if server.temperature > 28:
+
+                    alerts.append({
+                        "type": "HIGH_TEMPERATURE",
+                        "severity": "Warning",
+                        "server_id": server.server_id,
+                        "rack_id": server.rack_id,
+                        "message": (
+                            f"{server.server_id} temperature is high"
+                        )
+                    })
+
+        return alerts
+
+    def get_telemetry(self):
+
+        total_power = self.get_total_power()
+
+        rack_telemetry = [
+            rack.get_telemetry()
+            for rack in self.racks
+        ]
+
+        server_telemetry = []
+
+        for rack in self.racks:
+
+            for server in rack.servers:
+                server_telemetry.append(
+                    server.get_telemetry()
+                )
+
+        return {
+            "timestamp": datetime.now().isoformat(
+                timespec="seconds"
+            ),
+
+            "facility": {
+                "active_servers": self.get_active_servers(),
+                "failed_servers": self.get_failed_servers(),
+                "it_power_watts": round(
+                    total_power,
+                    2
+                ),
+                "average_temperature_c": round(
+                    self.get_average_temperature(),
+                    2
+                )
+            },
+
+            "racks": rack_telemetry,
+
+            "servers": server_telemetry,
+
+            "alerts": self.get_alerts()
+        }
+
+    def print_summary(self):
+
+        telemetry = self.get_telemetry()
+
+        facility = telemetry["facility"]
+
+        print("\n" + "=" * 80)
+
+        print(
+            f"DATA CENTER TELEMETRY | "
+            f"{telemetry['timestamp']}"
+        )
+
+        print("=" * 80)
+
+        for rack in self.racks:
+
+            rack_telemetry = rack.get_telemetry()
 
             print(
                 f"{rack.rack_id:<8} "
-                f"Temp: {rack_temperature:>5.1f} °C | "
-                f"Power: {rack_power:>7.1f} W | "
-                f"Active: {active_servers} | "
-                f"Failed: {failed_servers}"
+                f"Temp: "
+                f"{rack_telemetry['temperature_c']:>5.1f} °C | "
+                f"Power: "
+                f"{rack_telemetry['power_watts']:>7.1f} W | "
+                f"Active: "
+                f"{rack_telemetry['active_servers']} | "
+                f"Failed: "
+                f"{rack_telemetry['failed_servers']}"
             )
 
             for server in rack.servers:
@@ -256,24 +394,49 @@ class DataCenter:
                     f"{server.status}"
                 )
 
-        print("-" * 70)
+        print("-" * 80)
 
         print(
             f"Active Servers: "
-            f"{self.get_active_servers()}"
+            f"{facility['active_servers']}"
         )
 
         print(
             f"Failed Servers: "
-            f"{self.get_failed_servers()}"
+            f"{facility['failed_servers']}"
+        )
+
+        print(
+            f"Average Facility Temperature: "
+            f"{facility['average_temperature_c']:.2f} °C"
         )
 
         print(
             f"Total Facility IT Power: "
-            f"{total_power / 1000:.2f} kW"
+            f"{facility['it_power_watts'] / 1000:.2f} kW"
         )
 
-        print("=" * 70)
+        print("-" * 80)
+
+        alerts = telemetry["alerts"]
+
+        if alerts:
+
+            print(f"ALERTS: {len(alerts)}")
+
+            for alert in alerts:
+
+                print(
+                    f"[{alert['severity']}] "
+                    f"{alert['type']}: "
+                    f"{alert['message']}"
+                )
+
+        else:
+
+            print("ALERTS: None")
+
+        print("=" * 80)
 
 
 # -----------------------------
