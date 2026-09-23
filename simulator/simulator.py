@@ -30,8 +30,26 @@ class Server:
 
         self.temperature = 22.0
         self.status = "Online"
+        self.failed = False
+
+    def fail(self):
+        """Simulate a server failure."""
+
+        self.failed = True
+        self.status = "Offline"
 
     def generate_telemetry(self):
+
+        # Failed servers do not generate normal telemetry
+        if self.failed:
+
+            self.cpu_usage = 0
+            self.memory_usage = 0
+            self.network_usage = 0
+            self.power = 0
+            self.status = "Offline"
+
+            return
 
         # Slowly change CPU utilization
         cpu_change = random.uniform(-8, 8)
@@ -116,14 +134,39 @@ class Rack:
         for server in self.servers:
             server.generate_telemetry()
 
+    def get_active_servers(self):
+
+        return sum(
+            1
+            for server in self.servers
+            if not server.failed
+        )
+
+    def get_failed_servers(self):
+
+        return sum(
+            1
+            for server in self.servers
+            if server.failed
+        )
+
     def get_rack_temperature(self):
+
+        active_servers = [
+            server
+            for server in self.servers
+            if not server.failed
+        ]
+
+        if not active_servers:
+            return 0
 
         total_temperature = sum(
             server.temperature
-            for server in self.servers
+            for server in active_servers
         )
 
-        return total_temperature / len(self.servers)
+        return total_temperature / len(active_servers)
 
     def get_total_power(self):
 
@@ -158,6 +201,20 @@ class DataCenter:
         for rack in self.racks:
             rack.generate_telemetry()
 
+    def get_active_servers(self):
+
+        return sum(
+            rack.get_active_servers()
+            for rack in self.racks
+        )
+
+    def get_failed_servers(self):
+
+        return sum(
+            rack.get_failed_servers()
+            for rack in self.racks
+        )
+
     def print_summary(self):
 
         total_power = 0
@@ -174,15 +231,21 @@ class DataCenter:
             rack_temperature = rack.get_rack_temperature()
             rack_power = rack.get_total_power()
 
+            active_servers = rack.get_active_servers()
+            failed_servers = rack.get_failed_servers()
+
             total_power += rack_power
 
             print(
                 f"{rack.rack_id:<8} "
                 f"Temp: {rack_temperature:>5.1f} °C | "
-                f"Power: {rack_power:>7.1f} W"
+                f"Power: {rack_power:>7.1f} W | "
+                f"Active: {active_servers} | "
+                f"Failed: {failed_servers}"
             )
-            
+
             for server in rack.servers:
+
                 print(
                     f"    {server.server_id:<10} "
                     f"CPU: {server.cpu_usage:>5.1f}% | "
@@ -194,6 +257,16 @@ class DataCenter:
                 )
 
         print("-" * 70)
+
+        print(
+            f"Active Servers: "
+            f"{self.get_active_servers()}"
+        )
+
+        print(
+            f"Failed Servers: "
+            f"{self.get_failed_servers()}"
+        )
 
         print(
             f"Total Facility IT Power: "
@@ -211,7 +284,11 @@ def main():
 
     data_center = DataCenter()
 
+    # Deliberately fail one server for testing
+    data_center.racks[0].servers[1].fail()
+
     print("Starting Data Center Digital Twin...")
+
     print(
         f"Rooms: {NUM_ROOMS} | "
         f"Racks: {NUM_ROOMS * RACKS_PER_ROOM} | "
