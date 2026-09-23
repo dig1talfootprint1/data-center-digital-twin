@@ -1,469 +1,339 @@
 import random
 import time
-from datetime import datetime
 
+from database.repository.server_repository import save_server_telemetry
 
-# -----------------------------
-# Configuration
-# -----------------------------
 
 NUM_ROOMS = 1
 RACKS_PER_ROOM = 2
 SERVERS_PER_RACK = 3
 
 
-# -----------------------------
-# Server
-# -----------------------------
-
 class Server:
-
     def __init__(self, server_id, rack_id):
         self.server_id = server_id
         self.rack_id = rack_id
 
         self.cpu_usage = random.uniform(20, 60)
         self.memory_usage = random.uniform(30, 70)
-        self.network_usage = random.uniform(50, 300)
+        self.network_usage = random.uniform(100, 300)
 
-        self.base_power = random.uniform(250, 400)
+        self.power_watts = 0
+        self.temperature_c = 22.0
 
-        self.temperature = 22.0
         self.status = "Online"
-        self.failed = False
-
-        self.power = 0
-
-    def fail(self):
-        """Simulate a server failure."""
-
-        self.failed = True
-        self.status = "Offline"
 
     def generate_telemetry(self):
-
-        # Failed servers do not generate normal telemetry
-        if self.failed:
-
+        if self.status == "Offline":
             self.cpu_usage = 0
             self.memory_usage = 0
             self.network_usage = 0
-            self.power = 0
-            self.status = "Offline"
+            self.power_watts = 0
+            self.temperature_c = 0
 
             return
 
-        # Slowly change CPU utilization
-        cpu_change = random.uniform(-8, 8)
+        self.cpu_usage = max(
+            5,
+            min(100, self.cpu_usage + random.uniform(-8, 8))
+        )
 
-        self.cpu_usage += cpu_change
-        self.cpu_usage = max(5, min(self.cpu_usage, 100))
+        self.memory_usage = max(
+            10,
+            min(95, self.memory_usage + random.uniform(-3, 3))
+        )
 
-        # Memory changes more slowly
-        memory_change = random.uniform(-3, 3)
+        self.network_usage = max(
+            0,
+            self.network_usage + random.uniform(-40, 40)
+        )
 
-        self.memory_usage += memory_change
-        self.memory_usage = max(10, min(self.memory_usage, 95))
-
-        # Network traffic
-        network_change = random.uniform(-40, 40)
-
-        self.network_usage += network_change
-        self.network_usage = max(0, self.network_usage)
-
-        # Power consumption depends on CPU usage
+        base_power = 150
         cpu_factor = self.cpu_usage / 100
 
-        self.power = self.base_power + (cpu_factor * 250)
+        self.power_watts = base_power + (cpu_factor * 250)
 
-        # Temperature depends on power consumption
-        target_temperature = 22 + (self.power - 250) / 100
+        target_temperature = 22 + (
+            (self.power_watts - 250) / 100
+        )
 
-        # Gradually move toward target temperature
-        self.temperature += (
-            target_temperature - self.temperature
-        ) * 0.15
+        self.temperature_c += (
+            (target_temperature - self.temperature_c) * 0.15
+        )
 
-        # Add a small amount of sensor noise
-        self.temperature += random.uniform(-0.2, 0.2)
+        self.temperature_c += random.uniform(-0.2, 0.2)
 
-        # Determine server status
         if self.cpu_usage > 95:
             self.status = "High Load"
         else:
             self.status = "Online"
 
-    def get_telemetry(self):
+    def fail(self):
+        self.status = "Offline"
 
+    def get_telemetry(self):
         return {
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
             "server_id": self.server_id,
             "rack_id": self.rack_id,
             "cpu_usage": round(self.cpu_usage, 2),
             "memory_usage": round(self.memory_usage, 2),
             "network_usage": round(self.network_usage, 2),
-            "power_watts": round(self.power, 2),
-            "temperature_c": round(self.temperature, 2),
+            "power_watts": round(self.power_watts, 2),
+            "temperature_c": round(self.temperature_c, 2),
             "status": self.status
         }
 
 
-# -----------------------------
-# Rack
-# -----------------------------
-
 class Rack:
-
-    def __init__(self, rack_id):
-
+    def __init__(self, rack_id, server_count):
         self.rack_id = rack_id
 
-        self.servers = []
-
-        for i in range(1, SERVERS_PER_RACK + 1):
-
-            server_id = f"{rack_id}-S{i:02d}"
-
-            server = Server(
-                server_id,
-                rack_id
+        self.servers = [
+            Server(
+                server_id=f"{rack_id}-S{i + 1:02d}",
+                rack_id=rack_id
             )
-
-            self.servers.append(server)
+            for i in range(server_count)
+        ]
 
     def generate_telemetry(self):
-
         for server in self.servers:
             server.generate_telemetry()
 
-    def get_active_servers(self):
-
-        return sum(
-            1
-            for server in self.servers
-            if not server.failed
-        )
-
-    def get_failed_servers(self):
-
-        return sum(
-            1
-            for server in self.servers
-            if server.failed
-        )
-
-    def get_rack_temperature(self):
-
+    def get_telemetry(self):
         active_servers = [
             server
             for server in self.servers
-            if not server.failed
+            if server.status != "Offline"
         ]
 
-        if not active_servers:
-            return 0
+        failed_servers = [
+            server
+            for server in self.servers
+            if server.status == "Offline"
+        ]
 
-        total_temperature = sum(
-            server.temperature
-            for server in active_servers
-        )
+        if active_servers:
+            average_temperature = sum(
+                server.temperature_c
+                for server in active_servers
+            ) / len(active_servers)
+        else:
+            average_temperature = 0
 
-        return total_temperature / len(active_servers)
-
-    def get_total_power(self):
-
-        return sum(
-            server.power
+        total_power = sum(
+            server.power_watts
             for server in self.servers
         )
 
-    def get_telemetry(self):
-
         return {
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
             "rack_id": self.rack_id,
-            "temperature_c": round(
-                self.get_rack_temperature(),
+            "active_servers": len(active_servers),
+            "failed_servers": len(failed_servers),
+            "average_temperature_c": round(
+                average_temperature,
                 2
             ),
-            "power_watts": round(
-                self.get_total_power(),
-                2
-            ),
-            "active_servers": self.get_active_servers(),
-            "failed_servers": self.get_failed_servers()
+            "power_watts": round(total_power, 2)
         }
 
 
-# -----------------------------
-# Data Center
-# -----------------------------
-
 class DataCenter:
-
     def __init__(self):
-
         self.racks = []
 
-        for room in range(1, NUM_ROOMS + 1):
+        for room_number in range(1, NUM_ROOMS + 1):
+            for rack_number in range(1, RACKS_PER_ROOM + 1):
+                rack_id = f"R{room_number}-{rack_number:02d}"
 
-            for rack in range(1, RACKS_PER_ROOM + 1):
-
-                rack_id = f"R{room}-{rack:02d}"
-
-                self.racks.append(
-                    Rack(rack_id)
+                rack = Rack(
+                    rack_id=rack_id,
+                    server_count=SERVERS_PER_RACK
                 )
 
-    def generate_telemetry(self):
+                self.racks.append(rack)
 
+    def generate_telemetry(self):
         for rack in self.racks:
             rack.generate_telemetry()
 
-    def get_active_servers(self):
-
-        return sum(
-            rack.get_active_servers()
-            for rack in self.racks
-        )
-
-    def get_failed_servers(self):
-
-        return sum(
-            rack.get_failed_servers()
-            for rack in self.racks
-        )
-
-    def get_total_power(self):
-
-        return sum(
-            rack.get_total_power()
-            for rack in self.racks
-        )
-
-    def get_average_temperature(self):
-
-        active_servers = []
+    def get_telemetry(self):
+        servers = []
 
         for rack in self.racks:
-
             for server in rack.servers:
+                servers.append(server.get_telemetry())
 
-                if not server.failed:
-                    active_servers.append(server)
+        active_servers = [
+            server
+            for server in servers
+            if server["status"] != "Offline"
+        ]
 
-        if not active_servers:
-            return 0
+        failed_servers = [
+            server
+            for server in servers
+            if server["status"] == "Offline"
+        ]
 
-        total_temperature = sum(
-            server.temperature
-            for server in active_servers
+        if active_servers:
+            average_temperature = sum(
+                server["temperature_c"]
+                for server in active_servers
+            ) / len(active_servers)
+        else:
+            average_temperature = 0
+
+        total_power = sum(
+            server["power_watts"]
+            for server in servers
         )
-
-        return total_temperature / len(active_servers)
-
-    def get_alerts(self):
 
         alerts = []
 
-        for rack in self.racks:
+        for server in servers:
+            if server["status"] == "Offline":
+                alerts.append({
+                    "server_id": server["server_id"],
+                    "type": "SERVER_OFFLINE",
+                    "severity": "Critical",
+                    "message": (
+                        f"Server {server['server_id']} is offline."
+                    )
+                })
 
-            for server in rack.servers:
+            if server["cpu_usage"] > 95:
+                alerts.append({
+                    "server_id": server["server_id"],
+                    "type": "HIGH_CPU",
+                    "severity": "Warning",
+                    "message": (
+                        f"Server {server['server_id']} "
+                        "has high CPU utilization."
+                    )
+                })
 
-                if server.status == "Offline":
-
-                    alerts.append({
-                        "type": "SERVER_OFFLINE",
-                        "severity": "Critical",
-                        "server_id": server.server_id,
-                        "rack_id": server.rack_id,
-                        "message": (
-                            f"{server.server_id} is offline"
-                        )
-                    })
-
-                elif server.status == "High Load":
-
-                    alerts.append({
-                        "type": "HIGH_CPU",
-                        "severity": "Warning",
-                        "server_id": server.server_id,
-                        "rack_id": server.rack_id,
-                        "message": (
-                            f"{server.server_id} is under high load"
-                        )
-                    })
-
-                if server.temperature > 28:
-
-                    alerts.append({
-                        "type": "HIGH_TEMPERATURE",
-                        "severity": "Warning",
-                        "server_id": server.server_id,
-                        "rack_id": server.rack_id,
-                        "message": (
-                            f"{server.server_id} temperature is high"
-                        )
-                    })
-
-        return alerts
-
-    def get_telemetry(self):
-
-        total_power = self.get_total_power()
-
-        rack_telemetry = [
-            rack.get_telemetry()
-            for rack in self.racks
-        ]
-
-        server_telemetry = []
-
-        for rack in self.racks:
-
-            for server in rack.servers:
-                server_telemetry.append(
-                    server.get_telemetry()
-                )
+            if server["temperature_c"] > 28:
+                alerts.append({
+                    "server_id": server["server_id"],
+                    "type": "HIGH_TEMPERATURE",
+                    "severity": "Warning",
+                    "message": (
+                        f"Server {server['server_id']} "
+                        "has high temperature."
+                    )
+                })
 
         return {
-            "timestamp": datetime.now().isoformat(
-                timespec="seconds"
-            ),
-
+            "timestamp": time.time(),
             "facility": {
-                "active_servers": self.get_active_servers(),
-                "failed_servers": self.get_failed_servers(),
-                "it_power_watts": round(
-                    total_power,
-                    2
-                ),
+                "active_servers": len(active_servers),
+                "failed_servers": len(failed_servers),
+                "it_power_watts": round(total_power, 2),
                 "average_temperature_c": round(
-                    self.get_average_temperature(),
+                    average_temperature,
                     2
                 )
             },
-
-            "racks": rack_telemetry,
-
-            "servers": server_telemetry,
-
-            "alerts": self.get_alerts()
+            "racks": [
+                rack.get_telemetry()
+                for rack in self.racks
+            ],
+            "servers": servers,
+            "alerts": alerts
         }
 
-    def print_summary(self):
-
-        telemetry = self.get_telemetry()
-
-        facility = telemetry["facility"]
-
-        print("\n" + "=" * 80)
-
-        print(
-            f"DATA CENTER TELEMETRY | "
-            f"{telemetry['timestamp']}"
-        )
-
-        print("=" * 80)
-
-        for rack in self.racks:
-
-            rack_telemetry = rack.get_telemetry()
-
-            print(
-                f"{rack.rack_id:<8} "
-                f"Temp: "
-                f"{rack_telemetry['temperature_c']:>5.1f} °C | "
-                f"Power: "
-                f"{rack_telemetry['power_watts']:>7.1f} W | "
-                f"Active: "
-                f"{rack_telemetry['active_servers']} | "
-                f"Failed: "
-                f"{rack_telemetry['failed_servers']}"
-            )
-
-            for server in rack.servers:
-
-                print(
-                    f"    {server.server_id:<10} "
-                    f"CPU: {server.cpu_usage:>5.1f}% | "
-                    f"RAM: {server.memory_usage:>5.1f}% | "
-                    f"Network: {server.network_usage:>6.1f} Mbps | "
-                    f"Power: {server.power:>6.1f} W | "
-                    f"Temp: {server.temperature:>5.1f} °C | "
-                    f"{server.status}"
-                )
-
-        print("-" * 80)
+    def print_summary(self, telemetry):
+        print("=" * 60)
+        print("DATA CENTER TELEMETRY")
+        print("=" * 60)
 
         print(
             f"Active Servers: "
-            f"{facility['active_servers']}"
+            f"{telemetry['facility']['active_servers']}"
         )
 
         print(
             f"Failed Servers: "
-            f"{facility['failed_servers']}"
+            f"{telemetry['facility']['failed_servers']}"
         )
 
         print(
-            f"Average Facility Temperature: "
-            f"{facility['average_temperature_c']:.2f} °C"
+            f"IT Power: "
+            f"{telemetry['facility']['it_power_watts']} W"
         )
 
         print(
-            f"Total Facility IT Power: "
-            f"{facility['it_power_watts'] / 1000:.2f} kW"
+            f"Average Temperature: "
+            f"{telemetry['facility']['average_temperature_c']} C"
         )
 
-        print("-" * 80)
+        print()
 
-        alerts = telemetry["alerts"]
+        for rack in telemetry["racks"]:
+            print(
+                f"{rack['rack_id']} | "
+                f"Active: {rack['active_servers']} | "
+                f"Failed: {rack['failed_servers']} | "
+                f"Power: {rack['power_watts']} W | "
+                f"Temp: {rack['average_temperature_c']} C"
+            )
 
-        if alerts:
+        print()
 
-            print(f"ALERTS: {len(alerts)}")
+        for server in telemetry["servers"]:
+            print(
+                f"{server['server_id']} | "
+                f"Status: {server['status']} | "
+                f"CPU: {server['cpu_usage']}% | "
+                f"Memory: {server['memory_usage']}% | "
+                f"Network: {server['network_usage']} Mbps | "
+                f"Power: {server['power_watts']} W | "
+                f"Temp: {server['temperature_c']} C"
+            )
 
-            for alert in alerts:
+        print()
 
+        if telemetry["alerts"]:
+            print("ALERTS:")
+
+            for alert in telemetry["alerts"]:
                 print(
                     f"[{alert['severity']}] "
-                    f"{alert['type']}: "
+                    f"{alert['type']} - "
                     f"{alert['message']}"
                 )
-
         else:
-
             print("ALERTS: None")
 
-        print("=" * 80)
+        print()
 
 
-# -----------------------------
-# Main simulation
-# -----------------------------
+def save_telemetry_to_database(telemetry):
+    """Save all server telemetry to PostgreSQL."""
+
+    for server in telemetry["servers"]:
+        save_server_telemetry(server)
+
 
 def main():
-
     data_center = DataCenter()
 
-    # Deliberately fail one server for testing
+    # Deliberately fail one server so that
+    # the failure simulation remains visible.
     data_center.racks[0].servers[1].fail()
 
-    print("Starting Data Center Digital Twin...")
-
-    print(
-        f"Rooms: {NUM_ROOMS} | "
-        f"Racks: {NUM_ROOMS * RACKS_PER_ROOM} | "
-        f"Servers: "
-        f"{NUM_ROOMS * RACKS_PER_ROOM * SERVERS_PER_RACK}"
-    )
-
     for _ in range(3):
-
         data_center.generate_telemetry()
 
-        data_center.print_summary()
+        telemetry = data_center.get_telemetry()
+
+        data_center.print_summary(telemetry)
+
+        save_telemetry_to_database(telemetry)
+
+        print("Telemetry saved to PostgreSQL.")
+        print()
 
         time.sleep(2)
 
