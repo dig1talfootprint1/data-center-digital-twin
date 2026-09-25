@@ -2,6 +2,12 @@
 .env
 .env.*
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 # Python
 __pycache__/
 *.py[cod]
@@ -10,6 +16,9 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# Build output
+dist/
 
 # IDE / editor files
 .vscode/
