@@ -38,12 +38,30 @@ def save_telemetry(
     power_watts,
     temperature_c
 ):
-    """Save one telemetry record for a server."""
+    """Save telemetry and update the server's operational status."""
 
     connection = get_connection()
 
     try:
         with connection.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT server_id
+                FROM servers
+                WHERE name = %s;
+                """,
+                (server_name,)
+            )
+
+            result = cursor.fetchone()
+
+            if result is None:
+                raise ValueError(
+                    f"Server '{server_name}' was not found."
+                )
+
+            server_id = result[0]
 
             cursor.execute(
                 """
@@ -55,36 +73,105 @@ def save_telemetry(
                     power_watts,
                     temperature_c
                 )
-                SELECT
-                    server_id,
+                VALUES (
+                    %s,
                     %s,
                     %s,
                     %s,
                     %s,
                     %s
-                FROM servers
-                WHERE name = %s;
+                );
                 """,
                 (
+                    server_id,
                     cpu_usage,
                     memory_usage,
                     network_usage_mbps,
                     power_watts,
-                    temperature_c,
-                    server_name
+                    temperature_c
                 )
             )
 
-            if cursor.rowcount == 0:
-                raise ValueError(
-                    f"Server '{server_name}' was not found."
+            status = (
+                "Failed"
+                if power_watts == 0
+                else "Online"
+            )
+
+            cursor.execute(
+                """
+                UPDATE servers
+                SET status = %s
+                WHERE server_id = %s;
+                """,
+                (
+                    status,
+                    server_id
+                )
+            )
+
+            if status == "Failed":
+
+                cursor.execute(
+                    """
+                    SELECT alert_id
+                    FROM alerts
+                    WHERE server_id = %s
+                      AND alert_type = 'Server Failure'
+                      AND resolved = FALSE
+                    LIMIT 1;
+                    """,
+                    (server_id,)
+                )
+
+                active_alert = cursor.fetchone()
+
+                if active_alert is None:
+
+                    cursor.execute(
+                        """
+                        INSERT INTO alerts (
+                            server_id,
+                            alert_type,
+                            severity,
+                            message,
+                            resolved
+                        )
+                        VALUES (
+                            %s,
+                            'Server Failure',
+                            'Critical',
+                            %s,
+                            FALSE
+                        );
+                        """,
+                        (
+                            server_id,
+                            f"Server {server_name} has failed."
+                        )
+                    )
+
+            else:
+
+                cursor.execute(
+                    """
+                    UPDATE alerts
+                    SET
+                        resolved = TRUE,
+                        resolved_at = CURRENT_TIMESTAMP
+                    WHERE server_id = %s
+                      AND alert_type = 'Server Failure'
+                      AND resolved = FALSE;
+                    """,
+                    (server_id,)
                 )
 
         connection.commit()
 
     finally:
         connection.close()
-        
+
+
 def save_server_telemetry(telemetry):
     """Save a server telemetry dictionary to PostgreSQL."""
 
