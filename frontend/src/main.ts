@@ -1170,7 +1170,8 @@ function attachServerClickHandlers() {
 
 
 async function showServerDetails(
-    serverId: number
+    serverId: number,
+    shouldScroll: boolean = true
 ) {
 
     const detailsPanel =
@@ -1187,25 +1188,27 @@ async function showServerDetails(
     detailsPanel.hidden = false;
 
 
-    detailsPanel.innerHTML = `
+    if (shouldScroll) {
+        detailsPanel.innerHTML = `
 
-        <div class="panel-header">
+            <div class="panel-header">
 
-            <div>
+                <div>
 
-                <p class="panel-eyebrow">
-                    SERVER INSPECTION
-                </p>
+                    <p class="panel-eyebrow">
+                        SERVER INSPECTION
+                    </p>
 
-                <h2>
-                    Loading server...
-                </h2>
+                    <h2>
+                        Loading server...
+                    </h2>
+
+                </div>
 
             </div>
 
-        </div>
-
-    `;
+        `;
+    }
 
 
     try {
@@ -1425,10 +1428,12 @@ async function showServerDetails(
         `;
 
 
-        detailsPanel.scrollIntoView({
-            behavior: "smooth",
-            block: "nearest"
-        });
+        if (shouldScroll) {
+            detailsPanel.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest"
+            });
+        }
 
 
     } catch (error) {
@@ -1475,6 +1480,9 @@ async function refreshDashboard() {
     pollingInProgress = true;
 
 
+    const scrollPosition = window.scrollY;
+
+
     try {
 
         const [
@@ -1488,17 +1496,144 @@ async function refreshDashboard() {
         ]);
 
 
-        renderDashboard(
-            summary,
-            servers,
-            alerts
-        );
+        const powerKilowatts =
+            summary.total_power_watts / 1000;
+
+
+        const metricValues =
+            document.querySelectorAll<HTMLElement>(
+                ".metric-value"
+            );
+
+
+        if (metricValues.length >= 4) {
+
+            metricValues[0].textContent =
+                String(summary.total_servers);
+
+            metricValues[1].textContent =
+                String(summary.online_servers);
+
+            metricValues[2].textContent =
+                String(summary.failed_servers);
+
+            metricValues[3].textContent =
+                `${powerKilowatts.toFixed(2)} kW`;
+        }
+
+
+        const telemetryValues =
+            document.querySelectorAll<HTMLElement>(
+                ".telemetry-row strong"
+            );
+
+
+        if (telemetryValues.length >= 5) {
+
+            telemetryValues[0].textContent =
+                `${summary.average_cpu_usage.toFixed(2)}%`;
+
+            telemetryValues[1].textContent =
+                `${summary.average_memory_usage.toFixed(2)}%`;
+
+            telemetryValues[2].textContent =
+                `${summary.average_temperature_c.toFixed(2)}°C`;
+
+            telemetryValues[3].textContent =
+                `${summary.total_network_usage_mbps.toLocaleString(
+                    "en-US",
+                    {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }
+                )} Mbps`;
+
+            telemetryValues[4].textContent =
+                `${powerKilowatts.toFixed(2)} kW`;
+        }
+
+
+        servers.forEach((server) => {
+
+            const button =
+                document.querySelector<HTMLButtonElement>(
+                    `.server[data-server-id="${server.server_id}"]`
+                );
+
+
+            if (!button) {
+                return;
+            }
+
+
+            const isFailed =
+                server.status.toLowerCase() ===
+                "failed";
+
+
+            button.classList.toggle(
+                "failed",
+                isFailed
+            );
+
+            button.classList.toggle(
+                "online",
+                !isFailed
+            );
+        });
+
+
+        const alertCount =
+            document.querySelector<HTMLElement>(
+                ".alert-count"
+            );
+
+
+        if (alertCount) {
+
+            alertCount.textContent =
+                `${alerts.length} ACTIVE`;
+        }
+
+
+        const alertsList =
+            document.querySelector<HTMLElement>(
+                ".alerts-list"
+            );
+
+
+        if (alertsList) {
+
+            alertsList.innerHTML =
+                renderAlerts(alerts);
+        }
 
 
         if (selectedServerId !== null) {
 
             await showServerDetails(
-                selectedServerId
+                selectedServerId,
+                false
+            );
+        }
+
+
+        window.scrollTo({
+            top: scrollPosition,
+            behavior: "auto"
+        });
+
+
+        const liveIndicator =
+            document.querySelector(
+                ".live-indicator"
+            );
+
+
+        if (liveIndicator) {
+
+            liveIndicator.classList.remove(
+                "connection-error"
             );
         }
 
