@@ -36,7 +36,7 @@ Node.js / TypeScript API
 Web Dashboard
 ```
 
-The system is designed so that server activity affects other parts of the simulated environment. For example, increased CPU usage increases power consumption and heat generation.
+The system is designed to be containerized with Docker, providing a consistent and reproducible environment for the simulator, database, and backend services.
 
 ## Main Features
 
