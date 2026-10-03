@@ -323,7 +323,7 @@ def main():
     # the failure simulation remains visible.
     data_center.racks[0].servers[1].fail()
 
-    for _ in range(3):
+    while True:
         data_center.generate_telemetry()
 
         telemetry = data_center.get_telemetry()
