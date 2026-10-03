@@ -20,20 +20,24 @@ The telemetry is collected, stored, and displayed through a web-based dashboard.
 
 ## System Architecture
 
+## System Architecture
+
+The telemetry is collected, stored, and displayed through a containerized web-based monitoring system.
+
 ```text
-Data Center
-     │
-     ▼
-Python Simulator
-     │
-     ▼
-PostgreSQL
-     │
-     ▼
-Node.js / TypeScript API
-     │
-     ▼
-Web Dashboard
+                         Docker Compose
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+   Python Simulator      PostgreSQL Database   Node.js / TypeScript API
+        │                     ▲                     │
+        └─────────────────────┘                     │
+                                                    ▼
+                                             Nginx Frontend
+                                                    │
+                                                    ▼
+                                               Web Browser
 ```
 
 The system is designed to be containerized with Docker, providing a consistent and reproducible environment for the simulator, database, and backend services.
