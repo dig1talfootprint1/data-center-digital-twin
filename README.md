@@ -210,20 +210,23 @@ The goal of this extension is to model temperature using differential equations 
 ```text
 data-center-digital-twin/
 │
+├── api/
+│   └── Node.js / TypeScript REST API
+│
+├── frontend/
+│   └── Nginx-served web dashboard
+│
 ├── simulator/
 │   └── Python telemetry simulation
 │
-├── backend/
-│   └── Node.js / TypeScript API
-│
-├── frontend/
-│   └── Web dashboard
-│
 ├── database/
-│   └── PostgreSQL schema and queries
+│   └── PostgreSQL schema, seed data, queries, and database scripts
 │
-├── docs/
-│   └── Project documentation
+├── compose.yaml
+│   └── Docker Compose multi-container configuration
+│
+├── PROJECT PLAN.md
+│   └── Project development plan
 │
 └── README.md
 ```
