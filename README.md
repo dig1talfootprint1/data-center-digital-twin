@@ -246,3 +246,4 @@ This project was built to gain practical experience with:
 * Numerical computing
 * Data-center infrastructure
 * Docker
+* Kubernetes
