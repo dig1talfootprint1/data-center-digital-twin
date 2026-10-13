@@ -125,28 +125,30 @@ The dashboard provides an overview of:
 ## Data Flow
 
 ```text
-Server Workload
-      │
-      ▼
-CPU / Memory / Network Usage
-      │
-      ▼
-Power Consumption
-      │
-      ▼
-Heat Generation
-      │
-      ▼
-Telemetry
-      │
-      ▼
-PostgreSQL
-      │
-      ▼
-Node.js API
-      │
-      ▼
-Dashboard
+Server Workload Simulation
+          │
+          ▼
+Python Telemetry Simulator
+          │
+          ├── CPU Usage
+          ├── Memory Usage
+          ├── Network Usage
+          ├── Power Consumption
+          ├── Temperature
+          └── Server Status
+                    │
+                    ▼
+             PostgreSQL
+          (Telemetry + Alerts)
+                    │
+                    ▼
+          Node.js / TypeScript API
+                    │
+                    ▼
+             Nginx Frontend
+                    │
+                    ▼
+             Web Dashboard
 ```
 
 The telemetry is designed to have relationships between different measurements instead of being generated as completely independent random values.
