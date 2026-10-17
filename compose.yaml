@@ -78,5 +78,6 @@ services:
     depends_on:
       - api
 
+
 volumes:
   postgres_data:
